@@ -104,6 +104,20 @@ let noteWrap;
 let noteBg;
 let noteText;
 
+// Pack and ashtray start in the box. Smoking is a lit cigarette in the hand.
+let pack;
+let tray;
+let packOut = false;
+let trayOut = false;
+let smoke = null;
+let held;
+let holdRig;
+let paperMesh;
+let ashMesh;
+let ember;
+let butts = 0;
+const puffs = [];
+
 function overlaps(x, z, list, r) {
   for (const s of list) {
     if (x + r > s.minX && x - r < s.maxX && z + r > s.minZ && z - r < s.maxZ) return true;
@@ -118,6 +132,15 @@ function selfCheck() {
   if (overlaps(2, 2, list, PLAYER_R)) throw new Error('far should miss');
   if (!overlaps(1.1, 0.5, list, PLAYER_R)) throw new Error('radius should hit');
   if (overlaps(-0.5, 0.5, list, PLAYER_R)) throw new Error('far side should miss');
+  if (stepSmoke(1, 0) !== 1) throw new Error('fresh cigarette');
+  if (Math.abs(stepSmoke(1, 25) - 0.5) > 1e-6) throw new Error('half cigarette');
+  if (stepSmoke(0.01, 50) !== 0) throw new Error('burnt out');
+}
+
+// A cigarette lasts BURN seconds. Zero means it is done.
+const BURN = 50;
+function stepSmoke(life, dt) {
+  return Math.max(0, life - dt / BURN);
 }
 
 function blocked(x, z) {
@@ -248,7 +271,7 @@ function buildWorld() {
   const paper = new THREE.MeshStandardMaterial({ color: 0xf3ead7, roughness: 0.9 });
   const packMat = new THREE.MeshStandardMaterial({ color: 0xf4f0e8, roughness: 0.6 });
   const packRed = new THREE.MeshStandardMaterial({ color: 0x8e2a2a, roughness: 0.5 });
-  const ashMat = new THREE.MeshStandardMaterial({ color: 0x8d9498, roughness: 0.25, metalness: 0.15 });
+  const ashMat = new THREE.MeshStandardMaterial({ color: 0xd7dbdf, roughness: 0.45, metalness: 0.05 });
   const porcelain = new THREE.MeshStandardMaterial({ color: 0xe7e4df, roughness: 0.35 });
   const fridgeMat = new THREE.MeshStandardMaterial({ color: 0xd5d8d4, roughness: 0.35, metalness: 0.1 });
 
@@ -530,22 +553,26 @@ function buildBox(x, z, wood, paper, packMat, packRed, ashMat, metal) {
   note.userData.kind = 'note';
   holder.add(note);
 
+  // Group origin sits on the bottom of the pack so the table placement is the bottom.
+  pack = new THREE.Group();
+  pack.position.set(0.07, 0.012, -0.04);
+  holder.add(pack);
   const cig = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.04, 0.05), packMat);
-  cig.position.set(0.07, 0.032, -0.04);
-  cig.userData.kind = 'look';
-  cig.userData.name = 'Cigarettes';
-  holder.add(cig);
+  cig.position.y = 0.02;
+  cig.castShadow = true;
+  cig.userData.kind = 'pack';
+  pack.add(cig);
   const band = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.016, 0.052), packRed);
-  band.position.set(0.07, 0.04, -0.04);
-  band.userData.kind = 'look';
-  band.userData.name = 'Cigarettes';
-  holder.add(band);
+  band.position.y = 0.028;
+  band.userData.kind = 'pack';
+  pack.add(band);
 
-  const ash = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.03, 0.02, 16), ashMat);
-  ash.position.set(0.08, 0.02, 0.05);
-  ash.userData.kind = 'look';
-  ash.userData.name = 'Ashtray';
-  holder.add(ash);
+  // Tall enough that it still reads from the chair once it is on the table.
+  tray = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.042, 0.04, 20), ashMat);
+  tray.position.set(0.08, 0.028, 0.04);
+  tray.castShadow = true;
+  tray.userData.kind = 'tray';
+  holder.add(tray);
 
   // On its side so it fits under the lid.
   const zippo = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.016, 0.03), metal);
@@ -563,6 +590,240 @@ function buildBox(x, z, wood, paper, packMat, packRed, ashMat, metal) {
   lid.userData.kind = 'box';
   lidHinge.add(lid);
   holder.add(lidHinge);
+  buildHeld();
+  buildPuffs();
+}
+
+// West edge of the side table, clear of the box. Bottoms sit on the tabletop.
+function placePack() {
+  packOut = true;
+  scene.attach(pack);
+  pack.position.set(4.9, 0.585, CHAIR.z - 0.18);
+  pack.rotation.set(0, 0.4, 0);
+}
+
+function placeTray() {
+  trayOut = true;
+  scene.attach(tray);
+  // Center y is half the height, so the bottom sits on the tabletop.
+  tray.position.set(4.92, 0.6, CHAIR.z + 0.02);
+}
+
+function buildHeld() {
+  holdRig = new THREE.Group();
+  scene.add(holdRig);
+  held = new THREE.Group();
+  // Lower right, in the hand. Unlit so it stays cream when the room is dim.
+  held.position.set(0.2, -0.17, -0.42);
+  held.rotation.set(-0.55, 0.2, 0.95);
+  held.scale.setScalar(1.35);
+  held.visible = false;
+  holdRig.add(held);
+
+  const filter = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0042, 0.0042, 0.014, 8),
+    new THREE.MeshBasicMaterial({ color: 0xc9a36a }),
+  );
+  filter.position.y = 0.007;
+  paperMesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0035, 0.0035, 1, 8),
+    new THREE.MeshBasicMaterial({ color: 0xf4efe4 }),
+  );
+  ashMesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0038, 0.0038, 1, 8),
+    new THREE.MeshBasicMaterial({ color: 0x9a9590 }),
+  );
+  ember = new THREE.Mesh(
+    new THREE.SphereGeometry(0.0048, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xff5a1f }),
+  );
+  for (const mesh of [filter, paperMesh, ashMesh, ember]) {
+    mesh.raycast = () => {};
+    mesh.frustumCulled = false;
+    held.add(mesh);
+  }
+}
+
+function layoutHeld() {
+  const len = Math.max(0.012, smoke.life * 0.062);
+  const ashLen = smoke.ash;
+  paperMesh.scale.y = len;
+  paperMesh.position.y = 0.014 + len / 2;
+  ashMesh.visible = ashLen > 0.002;
+  ashMesh.scale.y = Math.max(ashLen, 0.001);
+  ashMesh.position.y = 0.014 + len + ashLen / 2;
+  ember.position.y = 0.014 + len + ashLen;
+}
+
+function buildPuffs() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(32, 32, 2, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(255,255,255,0.9)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 64, 64);
+  const tex = new THREE.CanvasTexture(c);
+  const geo = new THREE.PlaneGeometry(1, 1);
+  for (let i = 0; i < 40; i++) {
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+      opacity: 0,
+    }));
+    mesh.visible = false;
+    mesh.raycast = () => {};
+    mesh.frustumCulled = false;
+    scene.add(mesh);
+    puffs.push({
+      mesh,
+      alive: false,
+      age: 0,
+      life: 1,
+      gravity: 0,
+      size: 0.05,
+      vel: new THREE.Vector3(),
+    });
+  }
+}
+
+function spawnPuff(pos, vel, opts) {
+  const p = puffs.find((item) => !item.alive);
+  if (!p) return;
+  p.alive = true;
+  p.age = 0;
+  p.life = opts.life;
+  p.gravity = opts.gravity;
+  p.size = opts.size;
+  p.vel.copy(vel);
+  p.mesh.position.copy(pos);
+  p.mesh.material.color.set(opts.color);
+  p.mesh.material.opacity = 0.45;
+  p.mesh.visible = true;
+  p.mesh.scale.setScalar(opts.size);
+}
+
+function tickPuffs(dt) {
+  for (const p of puffs) {
+    if (!p.alive) continue;
+    p.age += dt;
+    if (p.age >= p.life) {
+      p.alive = false;
+      p.mesh.visible = false;
+      continue;
+    }
+    p.vel.y += p.gravity * dt;
+    p.mesh.position.addScaledVector(p.vel, dt);
+    const k = p.age / p.life;
+    p.mesh.scale.setScalar(p.size * (1 + k * 2.4));
+    p.mesh.material.opacity = (1 - k) * 0.72;
+    p.mesh.quaternion.copy(camera.quaternion);
+  }
+}
+
+const tip = new THREE.Vector3();
+const mouth = new THREE.Vector3();
+
+function wispAt(pos, vel, opts) {
+  spawnPuff(pos, vel, opts);
+}
+
+function emberWisp() {
+  ember.getWorldPosition(tip);
+  wispAt(tip, new THREE.Vector3(
+    (Math.random() - 0.5) * 0.03,
+    0.16 + Math.random() * 0.1,
+    (Math.random() - 0.5) * 0.03,
+  ), { life: 1.5, gravity: 0.22, size: 0.035, color: 0xddd8d0 });
+}
+
+function exhale() {
+  camera.getWorldDirection(forward);
+  mouth.copy(camera.position).addScaledVector(forward, 0.2);
+  mouth.y -= 0.05;
+  for (let i = 0; i < 7; i++) {
+    const vel = forward.clone().multiplyScalar(0.22 + Math.random() * 0.18);
+    vel.y += 0.06 + Math.random() * 0.1;
+    vel.x += (Math.random() - 0.5) * 0.07;
+    vel.z += (Math.random() - 0.5) * 0.07;
+    wispAt(mouth, vel, { life: 2.6, gravity: 0.12, size: 0.09, color: 0xe7e2da });
+  }
+}
+
+function beginSmoke() {
+  if (smoke || !packOut) return;
+  smoke = { life: 1, ash: 0, nextExhale: 1.6, emberWait: 0.05 };
+  held.visible = true;
+  layoutHeld();
+}
+
+function dropButt() {
+  if (!trayOut || butts >= 5) return;
+  const stub = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.004, 0.004, 0.016, 6),
+    new THREE.MeshBasicMaterial({ color: 0xe4dccb }),
+  );
+  // Tray center is mid-height. The stub lies on the rim, not inside the dish.
+  stub.position.set((butts % 3) * 0.014 - 0.014, 0.026, butts > 2 ? 0.01 : -0.006);
+  stub.rotation.z = Math.PI / 2;
+  stub.rotation.y = butts * 0.7;
+  stub.raycast = () => {};
+  tray.add(stub);
+  butts += 1;
+}
+
+function finishCigarette() {
+  if (!smoke) return;
+  exhale();
+  dropButt();
+  smoke = null;
+  held.visible = false;
+}
+
+function ashCigarette() {
+  if (!smoke || !trayOut) return;
+  smoke.ash = 0;
+  ember.getWorldPosition(tip);
+  const to = new THREE.Vector3();
+  tray.getWorldPosition(to);
+  to.y += 0.03;
+  for (let i = 0; i < 6; i++) {
+    const vel = to.clone().sub(tip).normalize().multiplyScalar(1.15);
+    vel.x += (Math.random() - 0.5) * 0.08;
+    vel.y += 0.15;
+    vel.z += (Math.random() - 0.5) * 0.08;
+    // Small flakes. The tip is close to the lens, so a bigger puff fills the view.
+    wispAt(tip, vel, { life: 0.85, gravity: -0.45, size: 0.012, color: 0xe6e1d8 });
+  }
+}
+
+function tickSmoke(dt) {
+  if (holdRig) {
+    holdRig.position.copy(camera.position);
+    holdRig.quaternion.copy(camera.quaternion);
+    holdRig.updateMatrixWorld(true);
+  }
+  tickPuffs(dt);
+  if (!smoke) return;
+  smoke.life = stepSmoke(smoke.life, dt);
+  smoke.ash = Math.min(0.014, smoke.ash + dt * 0.005);
+  if (smoke.life === 0) {
+    finishCigarette();
+    return;
+  }
+  layoutHeld();
+  smoke.emberWait -= dt;
+  if (smoke.emberWait <= 0) {
+    smoke.emberWait = 0.18;
+    emberWisp();
+  }
+  smoke.nextExhale -= dt;
+  if (smoke.nextExhale <= 0) {
+    smoke.nextExhale = 4 + Math.random() * 1.6;
+    exhale();
+  }
 }
 
 function buildLamp(brass, shadeMat) {
@@ -643,6 +904,27 @@ function use() {
     showNote();
     return;
   }
+  if (kind === 'pack') {
+    if (!packOut) {
+      if (boxOpen) placePack();
+      return;
+    }
+    if (!smoke) beginSmoke();
+    return;
+  }
+  if (kind === 'tray') {
+    if (!trayOut) {
+      if (boxOpen) placeTray();
+      return;
+    }
+    if (smoke) ashCigarette();
+    return;
+  }
+  // Nothing under the crosshair. A lit cigarette goes out. Otherwise stand.
+  if (smoke && !kind) {
+    finishCigarette();
+    return;
+  }
   if (mode === 'sit') beginStand();
 }
 
@@ -657,6 +939,8 @@ function lookAt() {
     // Your own chair fills the lap. Don't let it hide the table.
     if (kind === 'chair' && mode !== 'walk') continue;
     if (kind === 'note' && !boxOpen) break;
+    if (kind === 'pack' && !packOut && !boxOpen) break;
+    if (kind === 'tray' && !trayOut && !boxOpen) break;
     currentHit = hit;
     break;
   }
@@ -666,6 +950,7 @@ function labelFor() {
   if (noteOpen) return { text: 'Close', action: true };
   const hit = currentHit;
   if (!hit) {
+    if (smoke) return { text: smoke.life < 0.28 ? 'Put it out' : 'Finish', action: true };
     if (mode === 'sit') return { text: 'Stand', action: true };
     return { text: '', action: false };
   }
@@ -673,6 +958,16 @@ function labelFor() {
   if (kind === 'chair') return { text: mode === 'sit' ? 'Stand' : 'Sit', action: true };
   if (kind === 'box') return { text: boxOpen ? 'Close the box' : 'Open the box', action: true };
   if (kind === 'note') return { text: 'Read the note', action: true };
+  if (kind === 'pack') {
+    if (!packOut) return { text: 'Take the cigarettes', action: true };
+    if (!smoke) return { text: 'Smoke', action: true };
+    return { text: 'Cigarettes', action: false };
+  }
+  if (kind === 'tray') {
+    if (!trayOut) return { text: 'Take the ashtray', action: true };
+    if (smoke) return { text: 'Ash', action: true };
+    return { text: 'Ashtray', action: false };
+  }
   if (kind === 'look') return { text: name || '', action: false };
   return { text: '', action: false };
 }
@@ -730,6 +1025,8 @@ function update(dt) {
     const target = boxOpen ? 2.15 : 0;
     lidHinge.rotation.x += (target - lidHinge.rotation.x) * Math.min(1, dt * 8);
   }
+
+  tickSmoke(dt);
 
   lookAt();
   const label = labelFor();
