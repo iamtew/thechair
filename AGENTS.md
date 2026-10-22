@@ -21,3 +21,18 @@ setup github pages to this repo.
 
 update AGENTS.md accordingly.
 
+## How it runs
+
+Static page. Three.js draws the apartment. PixiJS draws the crosshair, the prompts, the note, and the touch controls. No build step. Modules come from jsDelivr, so the page needs a network.
+
+- Local: `python -m http.server 5173`, then open the root.
+- Live: https://iamtew.github.io/thechair/
+
+## Controls
+
+- Desktop: click to look, WASD to walk, E to sit, stand, open the box, or read the note. Esc releases the mouse. Hold the mouse button and drag if the browser will not capture the pointer.
+- Phone: drag the left side to walk, the right side to look, tap Use.
+
+Spawn is the entrance. The Chesterfield is in the bedroom, past the foot of the bed. The box on the side table opens. The note is inside, with cigarettes, an ashtray, and a Zippo.
+
+

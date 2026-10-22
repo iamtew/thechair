@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>The Chair</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+      touch-action: none;
+    }
+    #view {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    /* Pixi draws on top. Events stay on the page, not the HUD widgets. */
+    #hud {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+    }
+    #hud canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+    body.locked, body.locked * { cursor: none; }
+    #boot-error {
+      position: fixed;
+      inset: 24px;
+      color: #f3ead7;
+      font: 16px/1.4 Georgia, serif;
+      white-space: pre-wrap;
+    }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "pixi.js": "https://cdn.jsdelivr.net/npm/pixi.js@8.8.1/dist/pixi.mjs"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="view"></canvas>
+  <div id="hud"></div>
+  <script type="module" src="game.js"></script>
+</body>
+</html>
