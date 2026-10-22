@@ -47,9 +47,22 @@ const Z_WC = 8.35;
 const Z_BATH = 10.05;
 const Z_N = 13.05;
 
-// Chair sits past the foot of the bed. Seat looks +z, at the bed.
+// Chair sits past the foot of the bed, turned so the sitter looks at the mattress.
+const BED = { x: 2.85, z: 11.55 };
 const CHAIR = { x: 4.15, z: 9.4 };
-const SEAT = { x: CHAIR.x, y: EYE_SIT, z: CHAIR.z + 0.05 };
+const toBedX = BED.x - CHAIR.x;
+const toBedZ = BED.z - CHAIR.z;
+// Group local +z becomes (sin θ, cos θ). That θ aims the backrest away from the bed.
+const CHAIR_TURN = Math.atan2(toBedX, toBedZ);
+// Camera yaw PI looks +z. This is the same aim, in that convention.
+const SIT_YAW = Math.atan2(-toBedX, -toBedZ);
+const sitLookX = -Math.sin(SIT_YAW);
+const sitLookZ = -Math.cos(SIT_YAW);
+const SEAT = {
+  x: CHAIR.x + sitLookX * 0.08,
+  y: EYE_SIT,
+  z: CHAIR.z + sitLookZ * 0.08,
+};
 // Stand just west of the chair, in the open aisle. Same spot the lerp returns to.
 const STAND_SPOT = { x: CHAIR.x - 1.05, y: STAND_Y, z: CHAIR.z };
 
@@ -66,6 +79,8 @@ let pitch = 0;
 let blend = 0;
 let fromPose = { x: 0, y: 0, z: 0 };
 let toPose = { x: 0, y: 0, z: 0 };
+let fromYaw = 0;
+let fromPitch = 0;
 
 const down = {};
 let movePtr = null;
@@ -370,17 +385,13 @@ function buildWorld() {
   addBlock(0.4, 0.45, 0.16, porcelain, 9.35, 0.55, 7.95, false);
 
   // Bedroom. West aisle (x about 1.25) stays open from the door to the back wall.
-  const bedX = 2.85;
-  const bedZ = 11.55;
-  tag(addBlock(1.6, 0.28, 2.1, woodDark, bedX, 0.2, bedZ), 'look', 'Bed');
-  addBlock(1.6, 0.55, 0.08, woodDark, bedX, 0.7, bedZ + 1.02, false);
-  addBlock(1.45, 0.18, 1.9, sheet, bedX, 0.38, bedZ, false);
-  addBlock(1.45, 0.1, 1.15, duvet, bedX, 0.5, bedZ + 0.2, false);
-  addBlock(0.62, 0.1, 0.36, sheet, bedX - 0.32, 0.52, bedZ + 0.72, false);
-  addBlock(0.62, 0.1, 0.36, sheet, bedX + 0.32, 0.52, bedZ + 0.72, false);
+  tag(addBlock(1.6, 0.28, 2.1, woodDark, BED.x, 0.2, BED.z), 'look', 'Bed');
+  addBlock(1.6, 0.55, 0.08, woodDark, BED.x, 0.7, BED.z + 1.02, false);
+  addBlock(1.45, 0.18, 1.9, sheet, BED.x, 0.38, BED.z, false);
+  addBlock(1.45, 0.1, 1.15, duvet, BED.x, 0.5, BED.z + 0.2, false);
+  addBlock(0.62, 0.1, 0.36, sheet, BED.x - 0.32, 0.52, BED.z + 0.72, false);
+  addBlock(0.62, 0.1, 0.36, sheet, BED.x + 0.32, 0.52, BED.z + 0.72, false);
   tag(addBlock(0.5, 1.9, 1.15, wood, 5.55, 0.95, 11.7), 'look', 'Wardrobe');
-
-  addBlock(1.7, 0.015, 1.35, leather, CHAIR.x, 0.008, CHAIR.z, false);
 
   buildChair(leather, buttonMat, woodDark);
   buildSideTable(wood, paper, packMat, packRed, ashMat, metal);
@@ -395,7 +406,7 @@ function buildWorld() {
   // The only shadow caster. Warm pool on the chair and the bed.
   const spot = new THREE.SpotLight(0xffb067, 90, 14, 0.85, 0.55, 1.4);
   spot.position.set(5.35, 1.72, 8.55);
-  spot.target.position.set(bedX, 0.7, bedZ);
+  spot.target.position.set(BED.x, 0.7, BED.z);
   spot.castShadow = true;
   spot.shadow.mapSize.set(1024, 1024);
   spot.shadow.bias = -0.0008;
@@ -422,7 +433,13 @@ function buildWorld() {
 function buildChair(leather, buttonMat, wood) {
   const g = new THREE.Group();
   g.position.set(CHAIR.x, 0, CHAIR.z);
+  g.rotation.y = CHAIR_TURN;
   const button = new THREE.SphereGeometry(0.022, 8, 8);
+
+  const rug = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.015, 1.35), leather);
+  rug.position.y = 0.008;
+  rug.receiveShadow = true;
+  g.add(rug);
 
   function part(w, h, d, mat, x, y, z, geo) {
     const mesh = new THREE.Mesh(geo || new THREE.BoxGeometry(w, h, d), mat);
@@ -433,7 +450,7 @@ function buildChair(leather, buttonMat, wood) {
     g.add(mesh);
   }
 
-  // Back is -z, so the sitter faces the bed.
+  // Back is local -z. The group turn points local +z at the bed.
   part(0.78, 0.16, 0.7, leather, 0, 0.46, 0.05);
   part(0.78, 0.58, 0.12, leather, 0, 0.78, -0.3);
   part(0.12, 0.28, 0.68, leather, -0.4, 0.62, 0.04);
@@ -452,15 +469,16 @@ function buildChair(leather, buttonMat, wood) {
     new THREE.BoxGeometry(0.96, 1.8, 0.95),
     new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
   );
-  proxy.position.set(CHAIR.x, 1.0, CHAIR.z);
+  proxy.position.set(0, 1, 0);
   proxy.userData.kind = 'chair';
-  scene.add(proxy);
+  g.add(proxy);
+  // Axis-aligned box around the turned chair. A bit fat so the corners still block.
   solids.push({
     id: 'chair',
-    minX: CHAIR.x - 0.48,
-    maxX: CHAIR.x + 0.48,
-    minZ: CHAIR.z - 0.4,
-    maxZ: CHAIR.z + 0.46,
+    minX: CHAIR.x - 0.58,
+    maxX: CHAIR.x + 0.58,
+    minZ: CHAIR.z - 0.58,
+    maxZ: CHAIR.z + 0.58,
   });
 }
 
@@ -572,8 +590,17 @@ function resize() {
 function beginSit() {
   fromPose = { x: player.x, y: player.y, z: player.z };
   toPose = { x: SEAT.x, y: SEAT.y, z: SEAT.z };
+  fromYaw = yaw;
+  fromPitch = pitch;
   blend = 0;
   mode = 'toSit';
+}
+
+function lerpAngle(a, b, t) {
+  let d = b - a;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return a + d * t;
 }
 
 function beginStand() {
@@ -687,6 +714,10 @@ function update(dt) {
     player.x = fromPose.x + (toPose.x - fromPose.x) * k;
     player.y = fromPose.y + (toPose.y - fromPose.y) * k;
     player.z = fromPose.z + (toPose.z - fromPose.z) * k;
+    if (mode === 'toSit') {
+      yaw = lerpAngle(fromYaw, SIT_YAW, k);
+      pitch = fromPitch * (1 - k);
+    }
     if (blend >= 1) mode = mode === 'toSit' ? 'sit' : 'walk';
   }
 
