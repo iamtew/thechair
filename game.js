@@ -21,11 +21,9 @@ import { Application, Graphics, Text, Container } from 'pixi.js';
 // z 0   +----------+
 
 const NOTE = [
-  'The day can stay outside.',
-  'The chair will take the weight.',
-  '',
-  'The lighter still works.',
-  "You don't have to finish it.",
+  'You sit down...',
+  'You relax...',
+  'You watch....',
 ].join('\n');
 
 const PLAYER_R = 0.28;
@@ -181,6 +179,9 @@ function selfCheck() {
   }
   // Bed block is 2.1 deep, centered on BED.z. Stay south of its foot.
   if (table.maxZ > BED.z - 1.05) throw new Error('side table hits the bed');
+  const arm = yawOffset(0.4, 0.08);
+  const armReach = Math.hypot(CHAIR.x + arm.x - SEAT.x, CHAIR.z + arm.z - SEAT.z);
+  if (armReach > USE_REACH) throw new Error('armrest pack out of reach');
 }
 
 // A cigarette lasts BURN seconds. Zero means it is done.
@@ -533,13 +534,13 @@ function buildChair(leather, buttonMat, wood) {
     }
   }
   scene.add(g);
-  // Standing eyes clear the back. This volume is what "look at the chair" hits.
+  // Standing eyes clear the back. Sit still hits the leather. No ray, or it eats the armrest pack.
   const proxy = new THREE.Mesh(
     new THREE.BoxGeometry(0.96, 1.8, 0.95),
     new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
   );
   proxy.position.set(0, 1, 0);
-  proxy.userData.kind = 'chair';
+  proxy.raycast = () => {};
   g.add(proxy);
   // Axis-aligned box around the turned chair. A bit fat so the corners still block.
   solids.push({
@@ -613,7 +614,7 @@ function buildBox(wood, paper, packMat, packRed, ashMat, metal) {
   note.userData.kind = 'note';
   holder.add(note);
 
-  // Group origin sits on the bottom of the pack so the table placement is the bottom.
+  // Group origin sits on the bottom of the pack so armrest placement is the bottom.
   pack = new THREE.Group();
   pack.position.set(0.07, 0.012, -0.04);
   holder.add(pack);
@@ -627,7 +628,6 @@ function buildBox(wood, paper, packMat, packRed, ashMat, metal) {
   band.userData.kind = 'pack';
   pack.add(band);
 
-  // Tall enough that it still reads from the chair once it is on the table.
   tray = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.042, 0.04, 20), ashMat);
   tray.position.set(0.08, 0.028, 0.04);
   tray.castShadow = true;
@@ -654,19 +654,19 @@ function buildBox(wood, paper, packMat, packRed, ashMat, metal) {
   buildPuffs();
 }
 
-// Inner edge, toward the chair, clear of the box. Bottoms sit on the tabletop.
+// Sitter's left arm. Bottoms sit on the leather.
 function placePack() {
   packOut = true;
   tableGroup.attach(pack);
-  pack.position.set(TABLE_X - 0.22, 0.585, TABLE_Z - 0.1);
+  pack.position.set(0.4, 0.76, 0.08);
   pack.rotation.set(0, 0.4, 0);
 }
 
 function placeTray() {
   trayOut = true;
   tableGroup.attach(tray);
-  // Center y is half the height, so the bottom sits on the tabletop.
-  tray.position.set(TABLE_X - 0.22, 0.6, TABLE_Z + 0.12);
+  // Center y is half the height, so the bottom sits on the arm.
+  tray.position.set(0.4, 0.78, 0.26);
 }
 
 function buildHeld() {
