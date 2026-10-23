@@ -35,6 +35,6 @@ Static page. Three.js draws the apartment. PixiJS draws the crosshair, the promp
 - Desktop: click to look, WASD to walk, E to sit, stand, open the box, read the note, or smoke. Esc releases the mouse. Hold the mouse button and drag if the browser will not capture the pointer.
 - Phone: drag the left side to walk, the right side to look, tap Use.
 
-Spawn is the entrance. The Chesterfield is in the bedroom, past the foot of the bed. The box on the side table opens. Take the cigarettes and the ashtray out onto the table. E on the pack lights one. It burns down, the tip smokes, and a breath of smoke goes out every few seconds. E on the ashtray ashes it. E with nothing under the crosshair puts it out, short or not. The pack does not run out.
+Spawn is the entrance. The Chesterfield is in the bedroom, past the foot of the bed. The box on the side table opens. Take the cigarettes and the ashtray out onto the armrest. E on the pack lights one. It burns down, the tip smokes, and a breath of smoke goes out every few seconds. E on the ashtray ashes it. E with nothing under the crosshair puts it out, short or not. The pack does not run out.
 
 
