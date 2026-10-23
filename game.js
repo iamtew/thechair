@@ -1057,7 +1057,8 @@ function update(dt) {
       camera.getWorldDirection(forward);
       forward.y = 0;
       if (forward.lengthSq() > 0) forward.normalize();
-      right.crossVectors(up, forward);
+      // forward × up is camera-right. up × forward is left.
+      right.crossVectors(forward, up);
       const k = (WALK * dt) / len;
       tryMove((forward.x * iz + right.x * ix) * k, 0);
       tryMove(0, (forward.z * iz + right.z * ix) * k);
