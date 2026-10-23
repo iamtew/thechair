@@ -65,6 +65,39 @@ const SEAT = {
 };
 // Stand just west of the chair, in the open aisle. Same spot the lerp returns to.
 const STAND_SPOT = { x: CHAIR.x - 1.05, y: STAND_Y, z: CHAIR.z };
+// Local +x is the sitter's left, clear of the aisle. The table uses the chair's turn.
+const TABLE_X = 0.88;
+const TABLE_Z = 0.12;
+const TABLE_W = 0.62;
+const TABLE_D = 0.46;
+
+// Chair yaw applied to a local (x, z) offset.
+function yawOffset(x, z) {
+  const c = Math.cos(CHAIR_TURN);
+  const s = Math.sin(CHAIR_TURN);
+  return { x: x * c + z * s, z: -x * s + z * c };
+}
+
+function tableSolid() {
+  const hw = TABLE_W / 2;
+  const hd = TABLE_D / 2;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const lx of [TABLE_X - hw, TABLE_X + hw]) {
+    for (const lz of [TABLE_Z - hd, TABLE_Z + hd]) {
+      const p = yawOffset(lx, lz);
+      const x = CHAIR.x + p.x;
+      const z = CHAIR.z + p.z;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (z < minZ) minZ = z;
+      if (z > maxZ) maxZ = z;
+    }
+  }
+  return { minX, maxX, minZ, maxZ };
+}
 
 const solids = [];
 let mode = 'walk';
@@ -105,6 +138,7 @@ let noteBg;
 let noteText;
 
 // Pack and ashtray start in the box. Smoking is a lit cigarette in the hand.
+let tableGroup;
 let pack;
 let tray;
 let packOut = false;
@@ -135,6 +169,18 @@ function selfCheck() {
   if (stepSmoke(1, 0) !== 1) throw new Error('fresh cigarette');
   if (Math.abs(stepSmoke(1, 25) - 0.5) > 1e-6) throw new Error('half cigarette');
   if (stepSmoke(0.01, 50) !== 0) throw new Error('burnt out');
+  const table = tableSolid();
+  const spot = yawOffset(TABLE_X, TABLE_Z);
+  const reach = Math.hypot(CHAIR.x + spot.x - SEAT.x, CHAIR.z + spot.z - SEAT.z);
+  if (reach > 1.15) throw new Error('side table out of reach');
+  if (SEAT.x > table.minX && SEAT.x < table.maxX && SEAT.z > table.minZ && SEAT.z < table.maxZ) {
+    throw new Error('seat is inside the side table');
+  }
+  if (STAND_SPOT.x > table.minX && STAND_SPOT.x < table.maxX && STAND_SPOT.z > table.minZ && STAND_SPOT.z < table.maxZ) {
+    throw new Error('stand spot is inside the side table');
+  }
+  // Bed block is 2.1 deep, centered on BED.z. Stay south of its foot.
+  if (table.maxZ > BED.z - 1.05) throw new Error('side table hits the bed');
 }
 
 // A cigarette lasts BURN seconds. Zero means it is done.
@@ -506,15 +552,27 @@ function buildChair(leather, buttonMat, wood) {
 }
 
 function buildSideTable(wood, paper, packMat, packRed, ashMat, metal) {
-  const x = 5.15;
-  const z = CHAIR.z;
-  const top = 0.56;
-  tag(addLoose(0.62, 0.04, 0.46, wood, x, top, z), 'look', 'Side table');
-  for (const [dx, dz] of [[-0.24, -0.16], [0.24, -0.16], [-0.24, 0.16], [0.24, 0.16]]) {
-    addLoose(0.05, top, 0.05, wood, x + dx, top / 2, z + dz);
+  tableGroup = new THREE.Group();
+  tableGroup.position.set(CHAIR.x, 0, CHAIR.z);
+  tableGroup.rotation.y = CHAIR_TURN;
+  scene.add(tableGroup);
+
+  function piece(w, h, d, mat, x, y, z) {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    tableGroup.add(mesh);
+    return mesh;
   }
-  solids.push({ minX: x - 0.31, maxX: x + 0.31, minZ: z - 0.23, maxZ: z + 0.23 });
-  buildBox(x, z, wood, paper, packMat, packRed, ashMat, metal);
+
+  const top = 0.56;
+  tag(piece(TABLE_W, 0.04, TABLE_D, wood, TABLE_X, top, TABLE_Z), 'look', 'Side table');
+  for (const [dx, dz] of [[-0.24, -0.16], [0.24, -0.16], [-0.24, 0.16], [0.24, 0.16]]) {
+    piece(0.05, top, 0.05, wood, TABLE_X + dx, top / 2, TABLE_Z + dz);
+  }
+  solids.push(tableSolid());
+  buildBox(wood, paper, packMat, packRed, ashMat, metal);
 }
 
 // addBlock always parents to the scene. The box parts need a group, so this is the loose mesh.
@@ -527,10 +585,12 @@ function addLoose(w, h, d, mat, x, y, z) {
   return mesh;
 }
 
-function buildBox(x, z, wood, paper, packMat, packRed, ashMat, metal) {
+function buildBox(wood, paper, packMat, packRed, ashMat, metal) {
   const holder = new THREE.Group();
-  holder.position.set(x, 0.58, z);
-  scene.add(holder);
+  holder.position.set(TABLE_X, 0.58, TABLE_Z);
+  // Hinge is local +z. This turn opens the lid away from the chair.
+  holder.rotation.y = Math.PI / 2;
+  tableGroup.add(holder);
 
   function side(w, h, d, px, py, pz) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wood);
@@ -594,19 +654,19 @@ function buildBox(x, z, wood, paper, packMat, packRed, ashMat, metal) {
   buildPuffs();
 }
 
-// West edge of the side table, clear of the box. Bottoms sit on the tabletop.
+// Inner edge, toward the chair, clear of the box. Bottoms sit on the tabletop.
 function placePack() {
   packOut = true;
-  scene.attach(pack);
-  pack.position.set(4.9, 0.585, CHAIR.z - 0.18);
+  tableGroup.attach(pack);
+  pack.position.set(TABLE_X - 0.22, 0.585, TABLE_Z - 0.1);
   pack.rotation.set(0, 0.4, 0);
 }
 
 function placeTray() {
   trayOut = true;
-  scene.attach(tray);
+  tableGroup.attach(tray);
   // Center y is half the height, so the bottom sits on the tabletop.
-  tray.position.set(4.92, 0.6, CHAIR.z + 0.02);
+  tray.position.set(TABLE_X - 0.22, 0.6, TABLE_Z + 0.12);
 }
 
 function buildHeld() {
