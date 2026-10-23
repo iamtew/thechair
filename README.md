@@ -1,5 +1,7 @@
 # The Chair
 
+<img src="logo.png" alt="The Chair" width="96">
+
 A night apartment, first person, in the browser.
 
 https://iamtew.github.io/thechair/

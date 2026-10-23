@@ -28,7 +28,7 @@ Static page. Three.js draws the apartment. PixiJS draws the crosshair, the promp
 - Local: `python -m http.server 5173`, then open the root.
 - Live: https://iamtew.github.io/thechair/
 
-`assets/` is Meat Bag's files. The served preview is root `og.jpg`, recopied from `assets/og.jpg` when the master changes.
+`assets/` is Meat Bag's files. The served preview is root `og.jpg`, recopied from `assets/og.jpg` when the master changes. Chair art is `assets/comfy-chair.png`; `magick` writes root `favicon.ico` and `logo.png`.
 
 ## Controls
 
