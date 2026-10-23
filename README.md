@@ -1,6 +1,6 @@
-# The Chair
+# Cuck Chair Simulator
 
-<img src="logo.png" alt="The Chair" width="96">
+<img src="logo.png" alt="Cuck Chair Simulator" width="96">
 
 A night apartment, first person, in the browser.
 

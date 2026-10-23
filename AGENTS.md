@@ -1,4 +1,4 @@
-# The Chair
+# Cuck Chair Simulator
 
 Using Three.JS and PixiJS to create a great visual 3D game in the browser. working great on both desktop and mobile.
 First person view 3D experience.
